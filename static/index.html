@@ -76,7 +76,9 @@
   textarea:focus { outline: none; border-color: var(--accent); }
 
   .presets { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
-  .presets.ex { margin: 0 0 10px; }
+  .presets.ex { margin: 0 0 12px; }
+  .cases-label { font: 400 10.5px/1 "Geist Mono", monospace; color: var(--faint);
+                 text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 9px; }
   .preset {
     appearance: none; border: 1px solid var(--border); border-radius: 6px;
     background: transparent; color: var(--muted); cursor: pointer;
@@ -155,13 +157,13 @@
       <div class="panel-body">
         <div class="pane">
           <label for="html">html</label>
+          <div class="cases-label">try a case — the verdict should be obvious</div>
           <div class="presets ex" id="exchips"></div>
           <textarea id="html" spellcheck="false"></textarea>
         </div>
         <div class="pane">
           <label for="pattern">pattern</label>
           <textarea id="pattern" spellcheck="false"></textarea>
-          <div class="presets" id="presets"></div>
           <button class="go" id="go"><i class="ph ph-magnifying-glass"></i>Match</button>
         </div>
       </div>
@@ -177,38 +179,35 @@
 </main>
 
 <script>
-const SAMPLE = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Example</title>
-  <link rel="stylesheet" href="/style.css">
-  <!-- TODO: remove tracking before launch -->
-</head>
-<body>
-  <header><nav><a href="/">Home</a> <a href="/about">About</a></nav></header>
-  <main>
-    <h1>Hello</h1>
-    <p>Some text with <em>emphasis</em> and an unclosed <b>bold tag.</p>
-    <a href="https://example.com?x=1" title="is 5 > 3?">external link</a>
-    <img src="/pic.png" alt="pic" />
-  </main>
-  <footer><small>&copy; 2026</small></footer>
-</body>
-</html>`;
-
-const PRESETS = [
-  "opening tags that are never closed",
-  "self-closing tags such as <br/> or <img ... />",
-  "a > character inside an attribute value",
-  "an HTML comment",
-  "an anchor pointing to a domain other than this page",
-];
-
 const $ = (id) => document.getElementById(id);
 const htmlEl = $("html"), patternEl = $("pattern"), goBtn = $("go"), verdictEl = $("verdict");
-htmlEl.value = SAMPLE;
-patternEl.value = PRESETS[0];
+
+// Curated cases: each loads an HTML sample + a pattern and runs it. Picked so
+// the correct verdict is unambiguous — a mix of clear MATCHes, a NO MATCH on
+// something a regex gets wrong, and a real 34 KB page.
+const CASES = [
+  { label: "an unclosed tag",
+    html: '<article><h2>News</h2><p>First <b>bold never closes</p><p>done</p></article>',
+    pattern: "is there an opening tag that is never closed?" },
+  { label: "a > hidden in an attribute",
+    html: '<div><a href="/x" title="3 > 5 is false">the link</a></div>',
+    pattern: "is there a greater-than (>) character inside an attribute value?" },
+  { label: "a <div> that's only a comment",
+    html: '<section><p>real content</p><!-- <div class="ghost"> a comment, not an element --><span>more</span></section>',
+    pattern: "does the document contain a div element?" },
+  { label: "an <img> missing its alt",
+    html: '<figure><img src="a.jpg"><img src="b.jpg" alt="b photo"></figure>',
+    pattern: "is there an img element that has no alt attribute?" },
+  { label: "a row of exactly 3 cells",
+    html: '<table><tr><td>1</td><td>2</td></tr><tr><td>1</td><td>2</td><td>3</td></tr></table>',
+    pattern: "is there a table row with exactly three cells?" },
+  { label: "a form (that's missing)",
+    html: '<main><h1>Title</h1><p>Body text</p></main>',
+    pattern: "is there a form element in the document?" },
+  { label: "a real 34 KB page",
+    fetch: "/examples/ycombinator.html",
+    pattern: "does the page contain a search form?" },
+];
 
 function chip(parent, text, onclick) {
   const b = document.createElement("button");
@@ -219,18 +218,15 @@ function chip(parent, text, onclick) {
   parent.appendChild(b);
 }
 
-PRESETS.forEach((p) => chip($("presets"), p, () => { patternEl.value = p; }));
+function loadCase(c) {
+  const fill = (html) => { htmlEl.value = html; patternEl.value = c.pattern; run(); };
+  if (c.fetch) fetch(c.fetch).then((r) => r.text()).then(fill);
+  else fill(c.html);
+}
+CASES.forEach((c) => chip($("exchips"), c.label, () => loadCase(c)));
+htmlEl.value = CASES[0].html;
+patternEl.value = CASES[0].pattern;
 
-const EXAMPLES = [
-  ["sample page", null],
-  ["broken table", "/examples/broken-table.html"],
-  ["ycombinator.com", "/examples/ycombinator.html"],
-];
-EXAMPLES.forEach(([name, url]) =>
-  chip($("exchips"), name, async () => {
-    htmlEl.value = url ? await (await fetch(url)).text() : SAMPLE;
-  })
-);
 function fact(k, v, cls) {
   return `<span class="fact ${cls || ""}">${k}: <b>${v}</b></span>`;
 }
