@@ -80,6 +80,7 @@ def to_dict(value):
 
 app = FastAPI(title="html-jev")
 app.mount("/fonts", StaticFiles(directory=Path(__file__).parent / "static" / "fonts"), name="fonts")
+app.mount("/examples", StaticFiles(directory=Path(__file__).parent / "static" / "examples"), name="examples")
 
 
 class MatchRequest(BaseModel):

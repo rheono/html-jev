@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>html-jev</title>
 <meta name="description" content="Paste HTML, describe a pattern, get a typed verdict in one forward pass.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d11'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%2345d483' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%2345d483'/%3E%3C/svg%3E">
+<script type="module" src="https://unpkg.com/@phosphor-icons/web@2.1.1/regular.js"></script>
+<script type="module" src="https://unpkg.com/@phosphor-icons/web@2.1.1/fill.js"></script>
 <style>
   @font-face { font-family: "Geist"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/geist-400.woff2") format("woff2"); }
   @font-face { font-family: "Geist"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/geist-500.woff2") format("woff2"); }
@@ -31,17 +34,24 @@
   }
   .mono { font-family: "Geist Mono", ui-monospace, monospace; }
   main { max-width: 960px; margin: 0 auto; padding: 28px 20px 48px; }
+  .ph { display: inline-block; vertical-align: -0.12em; }
 
-  .top { display: flex; align-items: baseline; justify-content: space-between;
+  .top { display: flex; align-items: center; justify-content: space-between;
          margin-bottom: 22px; }
-  .wordmark { font: 500 15px/1 "Geist Mono", monospace; color: var(--text); }
+  .wordmark { display: flex; align-items: center; gap: 8px;
+              font: 500 15px/1 "Geist Mono", monospace; color: var(--text); }
   .wordmark b { color: var(--accent); font-weight: 500; }
-  .top a { color: var(--muted); text-decoration: none; font-size: 13px;
+  .top a { display: flex; align-items: center; gap: 6px;
+           color: var(--muted); text-decoration: none; font-size: 13px;
            transition: color 150ms; }
   .top a:hover { color: var(--text); }
 
   .panel { background: var(--surface); border: 1px solid var(--border);
            border-radius: 10px; overflow: hidden; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
   .panel-body { display: grid; grid-template-columns: 1.25fr 1fr; }
   @media (max-width: 760px) { .panel-body { grid-template-columns: 1fr; } }
   .pane { padding: 16px; }
@@ -66,6 +76,7 @@
   textarea:focus { outline: none; border-color: var(--accent); }
 
   .presets { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+  .presets.ex { margin: 0 0 10px; }
   .preset {
     appearance: none; border: 1px solid var(--border); border-radius: 6px;
     background: transparent; color: var(--muted); cursor: pointer;
@@ -78,6 +89,7 @@
   .go {
     margin-top: 14px; width: 100%; appearance: none; cursor: pointer;
     border: none; border-radius: 8px; padding: 12px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
     background: var(--accent); color: #07130c;
     font: 500 14px/1 "Geist", sans-serif;
     transition: filter 150ms, transform 100ms;
@@ -85,17 +97,18 @@
   .go:hover { filter: brightness(1.08); }
   .go:active { transform: scale(0.985); }
   .go:disabled { filter: grayscale(0.4) brightness(0.7); cursor: default; }
+  .go .ph { font-size: 15px; }
 
+  /* ── verdict ─────────────────────────────────────────── */
   .verdict {
     border-top: 1px solid var(--border-soft); padding: 16px;
     display: grid; grid-template-columns: auto 1fr auto;
     gap: 12px 24px; align-items: center; min-height: 80px;
   }
-  @media (max-width: 760px) {
-    .verdict { grid-template-columns: 1fr; gap: 12px; }
-  }
+  @media (max-width: 760px) { .verdict { grid-template-columns: 1fr; gap: 12px; } }
   .v-left { display: flex; flex-direction: column; gap: 7px; min-width: 210px; }
-  .v-word { font: 500 20px/1 "Geist Mono", monospace; }
+  .v-word { font: 500 20px/1 "Geist Mono", monospace; display: flex; align-items: center; gap: 8px; }
+  .v-word .ph { font-size: 19px; }
   .v-word.yes { color: var(--accent); }
   .v-word.no { color: var(--neg); }
   .v-track { width: 210px; height: 4px; border-radius: 2px;
@@ -133,25 +146,28 @@
 <body>
 <main>
   <div class="top">
-    <span class="wordmark">html<b>-jev</b></span>
-    <a href="https://github.com/rheono/html-jev" target="_blank">github</a>
+    <span class="wordmark"><i class="ph ph-crosshair" style="color:var(--accent)"></i>html<b>-jev</b></span>
+    <a href="https://github.com/rheono/html-jev" target="_blank"><i class="ph ph-github-logo" style="font-size:15px"></i>github</a>
   </div>
 
   <div class="panel">
-    <div class="panel-body">
-      <div class="pane">
-        <label for="html">html</label>
-        <textarea id="html" spellcheck="false"></textarea>
+    <div class="view active" id="view-match">
+      <div class="panel-body">
+        <div class="pane">
+          <label for="html">html</label>
+          <div class="presets ex" id="exchips"></div>
+          <textarea id="html" spellcheck="false"></textarea>
+        </div>
+        <div class="pane">
+          <label for="pattern">pattern</label>
+          <textarea id="pattern" spellcheck="false"></textarea>
+          <div class="presets" id="presets"></div>
+          <button class="go" id="go"><i class="ph ph-magnifying-glass"></i>Match</button>
+        </div>
       </div>
-      <div class="pane">
-        <label for="pattern">pattern</label>
-        <textarea id="pattern" spellcheck="false"></textarea>
-        <div class="presets" id="presets"></div>
-        <button class="go" id="go">Match</button>
+      <div class="verdict" id="verdict">
+        <div class="v-idle" id="vidle">running…</div>
       </div>
-    </div>
-    <div class="verdict" id="verdict">
-      <div class="v-idle" id="vidle">running…</div>
     </div>
   </div>
 
@@ -194,15 +210,27 @@ const htmlEl = $("html"), patternEl = $("pattern"), goBtn = $("go"), verdictEl =
 htmlEl.value = SAMPLE;
 patternEl.value = PRESETS[0];
 
-PRESETS.forEach((p) => {
+function chip(parent, text, onclick) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "preset";
-  b.textContent = p;
-  b.onclick = () => { patternEl.value = p; };
-  $("presets").appendChild(b);
-});
+  b.textContent = text;
+  b.onclick = onclick;
+  parent.appendChild(b);
+}
 
+PRESETS.forEach((p) => chip($("presets"), p, () => { patternEl.value = p; }));
+
+const EXAMPLES = [
+  ["sample page", null],
+  ["broken table", "/examples/broken-table.html"],
+  ["ycombinator.com", "/examples/ycombinator.html"],
+];
+EXAMPLES.forEach(([name, url]) =>
+  chip($("exchips"), name, async () => {
+    htmlEl.value = url ? await (await fetch(url)).text() : SAMPLE;
+  })
+);
 function fact(k, v, cls) {
   return `<span class="fact ${cls || ""}">${k}: <b>${v}</b></span>`;
 }
@@ -214,7 +242,7 @@ function render(d) {
   const unclosed = s.unclosed.length ? s.unclosed.join(", ") : "none";
   verdictEl.innerHTML = `
     <div class="v-left">
-      <div class="v-word ${yes ? "yes" : "no"}">${yes ? "MATCH" : "NO MATCH"}</div>
+      <div class="v-word ${yes ? "yes" : "no"}"><i class="ph ${yes ? "ph-check-circle" : "ph-x-circle"}"></i>${yes ? "MATCH" : "NO MATCH"}</div>
       <div class="v-track"><div class="v-fill" id="vfill"></div></div>
       <div class="v-pct">${pct}%</div>
     </div>
@@ -236,7 +264,7 @@ function render(d) {
 
 async function run() {
   goBtn.disabled = true;
-  verdictEl.innerHTML = `<div class="v-idle busy" id="vidle">one forward pass…</div>`;
+  verdictEl.innerHTML = `<div class="v-idle busy">one forward pass…</div>`;
   try {
     const r = await fetch("/match", {
       method: "POST",
@@ -253,8 +281,11 @@ async function run() {
 }
 
 goBtn.onclick = run;
-patternEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run(); }
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || (e.key.toLowerCase() === "m" && e.shiftKey)) && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    run();
+  }
 });
 
 run();
