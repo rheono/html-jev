@@ -1,7 +1,6 @@
-import hashlib
 import os
-import re
 import time
+from html.parser import HTMLParser
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -11,95 +10,59 @@ from typesafe_sdk import AsyncTypeSafeClient
 
 PRICE_PER_MTOK = 0.042
 MOCK = os.environ.get("MOCK") == "1"
+MAX_HTML_CHARS = 60_000
 
-DEFAULT_QUESTIONS = {
-    "well_formed": {
-        "type": "noul",
-        "instructions": "Is this HTML well-formed: every opening tag matched by a correct closing tag, proper nesting, no stray tags?",
-    },
-    "self_closing": {
-        "type": "noul",
-        "instructions": "Does this HTML contain any self-contained self-closing tags (e.g. <br/>, <img ... />, <hr/>)?",
-    },
-    "is_html": {
-        "type": "noul",
-        "instructions": "Is this input HTML markup rather than plain text?",
-    },
-    "size": {
-        "type": "choice",
-        "instructions": "How large is the document?",
-        "criteria": {
-            "snippet": "a few tags, under ~20 elements",
-            "section": "a page section, ~20-100 elements",
-            "page": "a full HTML document with head and body, ~100+ elements",
-        },
-    },
-    "nesting": {
-        "type": "score",
-        "instructions": "How deeply nested are the elements?",
-        "criteria": ["flat, 1-2 levels", "shallow, 3-5 levels", "deep, 6-10 levels", "extreme, 10+ levels"],
-    },
-}
-
-VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
 
-def mock_answers(html: str):
-    tags = re.findall(r"<(/?)([a-zA-Z][a-zA-Z0-9]*)", html)
-    self_closing = bool(re.search(r"<[a-zA-Z][^>]*?/>", html))
-    balanced, stack = True, []
-    depth = max_depth = 0
-    for close, name in tags:
-        name = name.lower()
-        if name in VOID_ELEMENTS:
-            continue
-        if close:
-            if not stack or stack.pop() != name:
-                balanced = False
-            depth -= 1
+class _Stats(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tag_names = []
+        self.stack = []
+        self.max_depth = 0
+        self.self_closing = 0
+        self.unclosed = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tag_names.append(tag)
+        if tag in VOID_ELEMENTS:
+            return
+        self.stack.append(tag)
+        self.max_depth = max(self.max_depth, len(self.stack))
+
+    def handle_startendtag(self, tag, attrs):
+        self.tag_names.append(tag)
+        self.self_closing += 1
+
+    def handle_endtag(self, tag):
+        self.tag_names.append(tag)
+        if tag in VOID_ELEMENTS:
+            return
+        if self.stack and self.stack[-1] == tag:
+            self.stack.pop()
+        elif tag in self.stack:
+            while self.stack and self.stack[-1] != tag:
+                self.unclosed.append(self.stack.pop())
+            if self.stack:
+                self.stack.pop()
         else:
-            stack.append(name)
-            depth += 1
-            max_depth = max(max_depth, depth)
-    balanced = balanced and not stack
-    n = len(tags)
-    size = "snippet" if n < 20 else "section" if n < 100 else "page"
-    nesting = 0 if max_depth <= 2 else 1 if max_depth <= 5 else 2 if max_depth <= 10 else 3
-    legend = {str(i): c for i, c in enumerate(DEFAULT_QUESTIONS["nesting"]["criteria"])}
-    seed = int(hashlib.sha256(html.encode()).hexdigest()[:8], 16)
-    jitter = (seed % 7) / 100
-    conf = min(1.0, round(0.95 + jitter, 4))
+            self.unclosed.append(tag)
 
-    def probs(dist, chosen):
-        rest = round((1 - dist[chosen]) / (len(dist) - 1), 4)
-        return {k: (round(dist[chosen], 4) if k == chosen else rest) for k in dist}
 
+def html_stats(html: str) -> dict:
+    p = _Stats()
+    p.feed(html)
+    p.close()
+    p.unclosed.extend(p.stack)
     return {
-        "well_formed": {"type": "noul", "noul": 0.98 if balanced else 0.06, "confidence": conf},
-        "self_closing": {"type": "noul", "noul": 0.97 if self_closing else 0.05, "confidence": conf},
-        "is_html": {"type": "noul", "noul": 0.99 if n > 3 else 0.04, "confidence": 1.0},
-        "size": {
-            "type": "choice",
-            "choice": size,
-            "confidence": conf,
-            "probabilities": probs({"snippet": 0.55, "section": 0.7, "page": 0.85}, size),
-        },
-        "nesting": {
-            "type": "score",
-            "score": float(nesting),
-            "confidence": conf,
-            "legend": legend,
-            "probabilities": {k: (1.0 if int(k) == nesting else 0.0) for k in legend},
-        },
+        "tags": len(p.tag_names),
+        "elements": len(set(p.tag_names)),
+        "max_depth": p.max_depth,
+        "self_closing": p.self_closing,
+        "unclosed": p.unclosed,
+        "tag_names": sorted(set(p.tag_names)),
     }
-
-
-app = FastAPI(title="html-jev")
-
-
-class AskRequest(BaseModel):
-    html: str = Field(min_length=1, max_length=200_000)
-    questions: dict | None = None
 
 
 def to_dict(value):
@@ -114,41 +77,72 @@ def to_dict(value):
     return value
 
 
+app = FastAPI(title="html-jev")
+
+
+class MatchRequest(BaseModel):
+    html: str = Field(min_length=1, max_length=MAX_HTML_CHARS)
+    pattern: str = Field(min_length=3, max_length=2_000)
+
+
 @app.get("/")
 def index():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
-@app.post("/ask")
-async def ask(req: AskRequest):
-    if MOCK:
-        return {
-            "model": "jev-mock",
-            "answers": mock_answers(req.html),
-            "usage": {"input_tokens": max(1, len(req.html) // 4), "output_tokens": 0},
-            "latency_ms": 1.2,
-            "cost_usd": 0.0,
-        }
-    try:
-        async with AsyncTypeSafeClient() as client:
-            t0 = time.perf_counter()
-            resp = await client.system_one(
-                state={"html": req.html},
-                questions=req.questions or DEFAULT_QUESTIONS,
-            )
-            latency_ms = (time.perf_counter() - t0) * 1000
-    except Exception as e:
-        status = getattr(e, "status_code", None)
-        raise HTTPException(
-            status_code=status if status and 400 <= status < 600 else 502,
-            detail=f"Jev call failed: {e}",
-        ) from e
+@app.post("/match")
+async def match(req: MatchRequest):
+    stats = html_stats(req.html)
 
-    usage = to_dict(resp.usage)
+    if MOCK:
+        import re
+
+        lowered = req.pattern.lower()
+        hay = req.html.lower()
+        hits = sum(1 for word in re.findall(r"[a-z]+", lowered) if len(word) > 3 and word in hay)
+        verdict = min(0.99, 0.15 + 0.3 * hits) if stats["tags"] else 0.05
+        answers = {
+            "match": {"type": "noul", "noul": round(verdict, 4), "confidence": 0.9},
+            "well_formed": {"type": "noul", "noul": 0.98 if not stats["unclosed"] else 0.05, "confidence": 0.95},
+        }
+        usage = {"input_tokens": max(1, len(req.html) // 4), "output_tokens": 0}
+        model, latency_ms = "jev-mock", 1.2
+    else:
+        questions = {
+            "match": {
+                "type": "noul",
+                "instructions": (
+                    "You are a pattern matcher for HTML. Decide whether this HTML matches the pattern below. "
+                    "Interpret the pattern literally. "
+                    f"Pattern: {req.pattern}"
+                ),
+            },
+            "well_formed": {
+                "type": "noul",
+                "instructions": "Is this HTML well-formed: every opening tag matched by a correct closing tag, proper nesting, no stray tags?",
+            },
+        }
+        try:
+            async with AsyncTypeSafeClient() as client:
+                t0 = time.perf_counter()
+                resp = await client.system_one(state={"html": req.html}, questions=questions)
+                latency_ms = (time.perf_counter() - t0) * 1000
+        except Exception as e:
+            status = getattr(e, "status_code", None)
+            raise HTTPException(
+                status_code=status if status and 400 <= status < 600 else 502,
+                detail=f"Jev call failed: {e}",
+            ) from e
+        answers = to_dict(resp.answers)
+        usage = to_dict(resp.usage)
+        model = resp.model
+
     input_tokens = usage.get("input_tokens", 0) if isinstance(usage, dict) else 0
     return {
-        "model": resp.model,
-        "answers": to_dict(resp.answers),
+        "model": model,
+        "match": answers["match"]["noul"],
+        "answers": answers,
+        "stats": stats,
         "usage": usage,
         "latency_ms": round(latency_ms, 1),
         "cost_usd": round(input_tokens * PRICE_PER_MTOK / 1_000_000, 8),

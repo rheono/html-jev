@@ -3,114 +3,125 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>regex to match HTML — 2026 edition</title>
+<title>html-jev — pattern matching for HTML</title>
 <style>
   :root {
     --bg: #0e1116; --card: #161b22; --border: #2d333b; --text: #e6edf3;
-    --muted: #8b949e; --blue: #58a6ff; --green: #3fb950; --tag-bg: #1f3a5f;
-    --tag-text: #8ec7ff; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --muted: #8b949e; --blue: #58a6ff; --green: #3fb950; --red: #f85149;
+    --tag-bg: #1f3a5f; --tag-text: #8ec7ff; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   .topbar { background: #11151c; border-bottom: 1px solid var(--border); }
-  .topbar-inner { max-width: 980px; margin: 0 auto; padding: 10px 20px;
+  .topbar-inner { max-width: 1060px; margin: 0 auto; padding: 10px 20px;
                   display: flex; align-items: baseline; gap: 14px; }
-  .logo { font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; }
+  .logo { font-weight: 700; font-size: 18px; text-decoration: none; color: var(--text); }
   .logo span { color: var(--green); }
   .tagline { color: var(--muted); font-size: 13px; }
-  main { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
+  main { max-width: 1060px; margin: 0 auto; padding: 24px 20px 60px; }
 
+  .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
   .card { background: var(--card); border: 1px solid var(--border);
-          border-radius: 8px; padding: 20px; margin-bottom: 24px; }
-  .q-head { display: flex; gap: 16px; }
-  .votes { display: flex; flex-direction: column; align-items: center;
-           min-width: 40px; padding-top: 2px; }
-  .votes .num { font-size: 20px; font-weight: 600; }
-  .votes .glyph { color: var(--muted); font-size: 14px; }
-  .q-title { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
-  .q-title a { color: var(--text); text-decoration: none; }
-  .tags { display: flex; gap: 6px; margin-bottom: 14px; }
-  .tag { background: var(--tag-bg); color: var(--tag-text); border-radius: 4px;
-         font-size: 12px; padding: 3px 8px; }
-  .q-meta { color: var(--muted); font-size: 12.5px; }
+          border-radius: 8px; padding: 18px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--muted); margin: 0 0 10px; font-weight: 600; }
 
-  textarea { width: 100%; min-height: 220px; background: #0b0e13; color: #d8dee6;
+  textarea { width: 100%; background: #0b0e13; color: #d8dee6;
              border: 1px solid var(--border); border-radius: 6px; padding: 12px;
-             font: 12.5px/1.55 var(--mono); resize: vertical; margin: 6px 0 14px; }
+             font: 12.5px/1.55 var(--mono); resize: vertical; }
   textarea:focus { outline: none; border-color: var(--blue); }
+  #html { min-height: 420px; }
+  #pattern { min-height: 70px; font: 14px/1.5 inherit; }
 
-  .actions { display: flex; align-items: center; gap: 14px; }
-  button { background: var(--blue); color: #08111f; border: none; border-radius: 6px;
-           font: 600 14px inherit; padding: 9px 18px; cursor: pointer; }
-  button:disabled { opacity: .55; cursor: default; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .preset { background: var(--tag-bg); color: var(--tag-text); border: none;
+            border-radius: 4px; font-size: 12px; padding: 4px 9px; cursor: pointer; }
+  .preset:hover { filter: brightness(1.2); }
+
+  .actions { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+  button.go { background: var(--blue); color: #08111f; border: none; border-radius: 6px;
+              font: 600 14px inherit; padding: 10px 22px; cursor: pointer; }
+  button.go:disabled { opacity: .55; cursor: default; }
   .status { color: var(--muted); font-size: 13px; }
 
-  .answers-head { font-size: 17px; font-weight: 600; margin: 30px 0 16px; }
-  .a-head { display: flex; gap: 16px; }
-  .accepted { color: var(--green); font-size: 22px; line-height: 1; margin-top: 4px; }
-  .a-meta { color: var(--muted); font-size: 12.5px; margin-top: 10px;
-            display: flex; gap: 16px; flex-wrap: wrap; }
+  .verdict { margin-top: 20px; display: none; }
+  .v-head { display: flex; align-items: center; gap: 16px; }
+  .v-word { font-size: 26px; font-weight: 700; font-family: var(--mono); }
+  .v-word.yes { color: var(--green); }
+  .v-word.no { color: var(--red); }
+  .bar { flex: 1; height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 4px;
+           background: var(--green); transition: width .5s ease; }
+  .v-prob { font-family: var(--mono); font-size: 15px; min-width: 60px; text-align: right; }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+  @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fact { background: #0b0e13; border: 1px solid var(--border); border-radius: 6px;
+          padding: 10px 12px; }
+  .fact .k { color: var(--muted); font-size: 11.5px; text-transform: uppercase;
+             letter-spacing: .05em; }
+  .fact .v { font-family: var(--mono); font-size: 17px; margin-top: 2px; }
+  .fact .v.bad { color: var(--red); }
+  .fact .v.ok { color: var(--green); }
+  .sub { margin-top: 10px; font-family: var(--mono); font-size: 12.5px;
+         color: var(--muted); }
+  .sub b { color: var(--text); font-weight: 600; }
+
+  .a-meta { color: var(--muted); font-size: 12.5px; margin-top: 16px;
+            display: flex; gap: 18px; flex-wrap: wrap; }
   .a-meta b { color: var(--text); font-weight: 600; }
-
-  .verdict { padding: 10px 0; border-top: 1px solid var(--border); }
-  .verdict:first-of-type { border-top: none; }
-  .v-row { display: flex; align-items: center; gap: 10px; }
-  .v-name { font-family: var(--mono); font-size: 13px; color: var(--muted);
-            min-width: 110px; }
-  .v-chip { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 2px 9px; }
-  .chip-true { background: rgba(63,185,80,.15); color: var(--green); }
-  .chip-false { background: rgba(248,81,73,.15); color: #f85149; }
-  .chip-other { background: rgba(88,166,255,.15); color: var(--blue); }
-  .bar { flex: 1; height: 6px; background: #21262d; border-radius: 3px;
-         overflow: hidden; }
-  .bar i { display: block; height: 100%; background: var(--green);
-           border-radius: 3px; transition: width .5s ease; }
-  .v-prob { font-family: var(--mono); font-size: 12.5px; min-width: 52px; text-align: right; }
-  .v-sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; padding-left: 120px; }
-
-  .footer { text-align: center; color: var(--muted); font-size: 12.5px;
-            margin-top: 40px; }
+  .footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 40px; }
   .footer a { color: var(--blue); text-decoration: none; }
 </style>
 </head>
 <body>
 <div class="topbar"><div class="topbar-inner">
   <a class="logo" href="/">html<span>-jev</span></a>
-  <div class="tagline">the regex that matches HTML — 2026 edition</div>
+  <div class="tagline">pattern matching for HTML — the part regex can't do</div>
 </div></div>
 <main>
-  <div class="card">
-    <div class="q-head">
-      <div class="votes"><div class="glyph">▲</div><div class="num">49,205</div><div class="glyph">▼</div></div>
-      <div>
-        <h1 class="q-title"><a href="https://stackoverflow.com/questions/1732348" target="_blank">Is there a regex that matches a full HTML page?</a></h1>
-        <div class="tags"><span class="tag">html</span><span class="tag">regex</span><span class="tag">jev</span></div>
-        <textarea id="html" spellcheck="false"></textarea>
-        <div class="actions">
-          <button id="ask">Ask Jev</button>
-          <div class="status" id="status">paste any HTML — full pages fine (64k context)</div>
-        </div>
+  <div class="grid">
+    <div class="card">
+      <h2>HTML</h2>
+      <textarea id="html" spellcheck="false"></textarea>
+    </div>
+    <div class="card">
+      <h2>Pattern</h2>
+      <textarea id="pattern" spellcheck="false" placeholder="Describe what to match, in plain language…"></textarea>
+      <div class="presets" id="presets"></div>
+      <div class="actions">
+        <button class="go" id="go">Match</button>
+        <div class="status" id="status">exact counts computed in code · judgment by Jev, one forward pass</div>
       </div>
     </div>
   </div>
 
-  <div id="answers" hidden>
-    <div class="answers-head">1 Answer</div>
-    <div class="card">
-      <div class="a-head">
-        <div class="votes"><div class="glyph">▲</div><div class="num">1</div><div class="accepted">✓</div></div>
-        <div style="flex:1">
-          <div id="verdicts"></div>
-          <div class="a-meta" id="a-meta"></div>
-        </div>
+  <div class="card verdict" id="verdict">
+    <div class="v-head">
+      <div class="v-word" id="vword"></div>
+      <div class="bar"><i id="vbar"></i></div>
+      <div class="v-prob" id="vprob"></div>
+    </div>
+    <div class="panels">
+      <div>
+        <h2>Deterministic · computed in code</h2>
+        <div class="facts" id="facts"></div>
+      </div>
+      <div>
+        <h2>Jev's judgment</h2>
+        <div class="sub" id="sub"></div>
       </div>
     </div>
+    <div class="a-meta" id="meta"></div>
   </div>
 
   <div class="footer">
-    169 lines of regex, retired. <a href="https://stackoverflow.com/a/1732454" target="_blank">The 2009 answer</a> is now a 421M-parameter model
-    answering typed questions in one forward pass, at $0.042 per million tokens.
+    2009 said this was provably impossible — HTML isn't a regular language.
+    <a href="https://stackoverflow.com/questions/1732348" target="_blank">The thread, 4.1M views.</a>
+    2026: the exact mechanics stay in code, the judgment goes to a System One model at $0.042/Mtok.
   </div>
 </main>
 
@@ -121,68 +132,83 @@ const SAMPLE = `<!doctype html>
   <meta charset="utf-8">
   <title>Example</title>
   <link rel="stylesheet" href="/style.css">
+  <!-- TODO: remove tracking before launch -->
 </head>
 <body>
   <header><nav><a href="/">Home</a> <a href="/about">About</a></nav></header>
   <main>
     <h1>Hello</h1>
     <p>Some text with <em>emphasis</em> and an unclosed <b>bold tag.</p>
+    <a href="https://example.com?x=1" title="is 5 > 3?">external link</a>
     <img src="/pic.png" alt="pic" />
   </main>
   <footer><small>&copy; 2026</small></footer>
 </body>
 </html>`;
 
+const PRESETS = [
+  "contains opening tags that are never closed",
+  "contains self-closing tags (e.g. <br/>, <img ... />)",
+  "contains a > character inside an attribute value",
+  "contains an HTML comment",
+  "contains an anchor whose href points to a domain other than this page",
+];
+
 const $ = (id) => document.getElementById(id);
 $("html").value = SAMPLE;
+$("pattern").value = PRESETS[0];
+PRESETS.forEach((p) => {
+  const b = document.createElement("button");
+  b.className = "preset";
+  b.textContent = p;
+  b.onclick = () => { $("pattern").value = p; };
+  $("presets").appendChild(b);
+});
 
-function chip(label, cls) {
-  return `<span class="v-chip ${cls}">${label}</span>`;
-}
-
-function verdictRow(name, a) {
-  let chipEl, prob, sub = "";
-  if (a.type === "noul") {
-    prob = a.noul;
-    chipEl = prob >= 0.5 ? chip("TRUE", "chip-true") : chip("FALSE", "chip-false");
-  } else if (a.type === "choice") {
-    prob = a.probabilities?.[a.choice] ?? 0;
-    chipEl = chip(a.choice, "chip-other");
-  } else if (a.type === "score") {
-    const levels = Object.values(a.legend ?? {});
-    const label = levels[a.score] ?? `level ${a.score}`;
-    prob = a.probabilities?.[String(a.score)] ?? a.confidence ?? 0;
-    chipEl = chip(label, "chip-other");
-  }
-  const pct = Math.round((prob ?? 0) * 100);
-  return `<div class="verdict">
-    <div class="v-row">
-      <span class="v-name">${name}</span>${chipEl}
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      <span class="v-prob">${pct}%</span>
-    </div>
-    ${a.confidence != null ? `<div class="v-sub">confidence ${a.confidence}</div>` : ""}
-  </div>`;
-}
-
-$("ask").onclick = async () => {
-  const btn = $("ask"), status = $("status");
+$("go").onclick = async () => {
+  const btn = $("go"), status = $("status");
   btn.disabled = true; status.textContent = "one forward pass…";
   try {
-    const r = await fetch("/ask", {
+    const r = await fetch("/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html: $("html").value }),
+      body: JSON.stringify({ html: $("html").value, pattern: $("pattern").value }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
-    $("verdicts").innerHTML = Object.entries(d.answers).map(([k, a]) => verdictRow(k, a)).join("");
-    $("a-meta").innerHTML =
-      `<span>answered by <b>jev</b></span><span>model <b>${d.model}</b></span>` +
+
+    const yes = d.match >= 0.5;
+    const pct = Math.round(d.match * 100);
+    const vword = $("vword");
+    vword.textContent = yes ? "MATCH" : "NO MATCH";
+    vword.className = "v-word " + (yes ? "yes" : "no");
+    const vbar = $("vbar");
+    vbar.style.width = pct + "%";
+    vbar.style.background = yes ? "var(--green)" : "var(--red)";
+    $("vprob").textContent = pct + "%";
+
+    const s = d.stats;
+    const fact = (k, v, cls) =>
+      `<div class="fact"><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div></div>`;
+    $("facts").innerHTML =
+      fact("tags", s.tags) +
+      fact("element types", s.elements) +
+      fact("max depth", s.max_depth) +
+      fact("self-closing", s.self_closing) +
+      fact("unclosed", s.unclosed.length ? s.unclosed.join(", ") : "none",
+           s.unclosed.length ? "bad" : "ok") +
+      fact("tag names", s.tag_names.join(" "));
+
+    $("sub").innerHTML =
+      `<b>well_formed</b> = ${Math.round((d.answers.well_formed?.noul ?? 0) * 100)}% ` +
+      `(confidence ${d.answers.well_formed?.confidence ?? "—"})`;
+
+    $("meta").innerHTML =
+      `<span>model <b>${d.model}</b></span>` +
       `<span><b>${d.latency_ms} ms</b></span>` +
       `<span><b>${d.usage?.input_tokens ?? 0} tokens</b> in · $${d.cost_usd}</span>`;
-    $("answers").hidden = false;
-    status.textContent = "answered.";
+    $("verdict").style.display = "block";
+    status.textContent = "done.";
   } catch (e) {
     status.textContent = "error: " + e.message;
   }
