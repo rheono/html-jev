@@ -3,10 +3,13 @@ import time
 from html.parser import HTMLParser
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from typesafe_sdk import AsyncTypeSafeClient
 
 PRICE_PER_MTOK = 0.042
@@ -82,6 +85,11 @@ app = FastAPI(title="html-jev")
 app.mount("/fonts", StaticFiles(directory=Path(__file__).parent / "static" / "fonts"), name="fonts")
 app.mount("/examples", StaticFiles(directory=Path(__file__).parent / "static" / "examples"), name="examples")
 
+# per-IP limit on the paid /match endpoint (single replica -> in-memory is enough)
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 class MatchRequest(BaseModel):
     html: str = Field(min_length=1, max_length=MAX_HTML_CHARS)
@@ -94,7 +102,8 @@ def index():
 
 
 @app.post("/match")
-async def match(req: MatchRequest):
+@limiter.limit("30/minute")
+async def match(request: Request, req: MatchRequest):
     stats = html_stats(req.html)
 
     if MOCK:

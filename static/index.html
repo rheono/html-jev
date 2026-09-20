@@ -272,7 +272,7 @@ async function run() {
       body: JSON.stringify({ html: htmlEl.value, pattern: patternEl.value }),
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || r.statusText);
+    if (!r.ok) throw new Error(d.detail || d.error || r.statusText);
     render(d);
   } catch (e) {
     verdictEl.innerHTML = `<div class="v-idle error">error: ${e.message}</div>`;
