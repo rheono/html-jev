@@ -4,125 +4,381 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>html-jev — pattern matching for HTML</title>
+<meta name="description" content="Paste HTML, describe a pattern, get a typed verdict in one forward pass. The part regex can't do.">
 <style>
+  @font-face { font-family: "Geist"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/geist-400.woff2") format("woff2"); }
+  @font-face { font-family: "Geist"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/geist-500.woff2") format("woff2"); }
+  @font-face { font-family: "Geist"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/geist-600.woff2") format("woff2"); }
+  @font-face { font-family: "Geist"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/geist-700.woff2") format("woff2"); }
+  @font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/geist-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/geist-mono-500.woff2") format("woff2"); }
+
   :root {
-    --bg: #0e1116; --card: #161b22; --border: #2d333b; --text: #e6edf3;
-    --muted: #8b949e; --blue: #58a6ff; --green: #3fb950; --red: #f85149;
-    --tag-bg: #1f3a5f; --tag-text: #8ec7ff; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --bg: #0b0d11;
+    --surface: #12151b;
+    --surface-2: #171b23;
+    --border: #232936;
+    --border-soft: #1b2029;
+    --text: #e9edf3;
+    --muted: #8f98a8;
+    --faint: #5c6575;
+    --accent: #45d483;
+    --accent-dim: rgba(69, 212, 131, 0.12);
+    --neg: #ff6b5e;
+    --neg-dim: rgba(255, 107, 94, 0.12);
+    --radius: 10px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  .topbar { background: #11151c; border-bottom: 1px solid var(--border); }
-  .topbar-inner { max-width: 1060px; margin: 0 auto; padding: 10px 20px;
-                  display: flex; align-items: baseline; gap: 14px; }
-  .logo { font-weight: 700; font-size: 18px; text-decoration: none; color: var(--text); }
-  .logo span { color: var(--green); }
-  .tagline { color: var(--muted); font-size: 13px; }
-  main { max-width: 1060px; margin: 0 auto; padding: 24px 20px 60px; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 400 16px/1.55 "Geist", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "Geist Mono", ui-monospace, monospace; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
-  .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; }
-  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--border);
-          border-radius: 8px; padding: 18px; }
-  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
-             color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  /* ── top bar ─────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(11, 13, 17, 0.72);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .topbar { background: var(--bg); backdrop-filter: none; }
+  }
+  .topbar-inner {
+    max-width: 1080px; margin: 0 auto; padding: 0 24px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .wordmark { font: 600 15px/1 "Geist", sans-serif; letter-spacing: -0.01em;
+              color: var(--text); text-decoration: none; }
+  .wordmark b { color: var(--accent); font-weight: 600; }
+  .topbar-right { display: flex; align-items: center; gap: 20px; }
+  .live { display: flex; align-items: center; gap: 7px;
+          font: 400 12px/1 "Geist Mono", monospace; color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+         animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .ghlink { color: var(--muted); text-decoration: none; font-size: 13.5px;
+            transition: color 150ms; }
+  .ghlink:hover { color: var(--text); }
 
-  textarea { width: 100%; background: #0b0e13; color: #d8dee6;
-             border: 1px solid var(--border); border-radius: 6px; padding: 12px;
-             font: 12.5px/1.55 var(--mono); resize: vertical; }
-  textarea:focus { outline: none; border-color: var(--blue); }
-  #html { min-height: 420px; }
-  #pattern { min-height: 70px; font: 14px/1.5 inherit; }
+  /* ── hero ────────────────────────────────────────────── */
+  .hero { padding: 88px 0 48px; }
+  .hero h1 {
+    margin: 0; font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 600;
+    letter-spacing: -0.025em; line-height: 1.06; max-width: 21ch;
+  }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero .sub {
+    margin: 18px 0 0; font-size: 17px; color: var(--muted);
+    max-width: 52ch; line-height: 1.55;
+  }
+  .hero .sub b { color: var(--text); font-weight: 500; }
+  .hero .metastrip {
+    margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px 22px;
+    font: 400 12.5px/1 "Geist Mono", monospace; color: var(--faint);
+  }
+  .hero .metastrip span::before { content: "·"; margin-right: 22px; color: var(--border); }
+  .hero .metastrip span:first-child::before { content: ""; margin: 0; }
 
-  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .preset { background: var(--tag-bg); color: var(--tag-text); border: none;
-            border-radius: 4px; font-size: 12px; padding: 4px 9px; cursor: pointer; }
-  .preset:hover { filter: brightness(1.2); }
+  /* ── tool panel ──────────────────────────────────────── */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 16px 48px -24px rgba(0,0,0,0.6);
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; border-bottom: 1px solid var(--border-soft);
+    background: var(--surface-2);
+  }
+  .panel-title { font: 500 12px/1 "Geist Mono", monospace; color: var(--muted); }
+  .panel-status { font: 400 12px/1 "Geist Mono", monospace; color: var(--faint);
+                  transition: color 200ms; }
+  .panel-status.busy { color: var(--accent); }
+  .panel-status.error { color: var(--neg); }
 
-  .actions { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
-  button.go { background: var(--blue); color: #08111f; border: none; border-radius: 6px;
-              font: 600 14px inherit; padding: 10px 22px; cursor: pointer; }
-  button.go:disabled { opacity: .55; cursor: default; }
-  .status { color: var(--muted); font-size: 13px; }
+  .panel-body {
+    display: grid; grid-template-columns: 1.25fr 1fr;
+  }
+  @media (max-width: 820px) { .panel-body { grid-template-columns: 1fr; } }
+  .pane { padding: 18px; }
+  .pane + .pane { border-left: 1px solid var(--border-soft); }
+  @media (max-width: 820px) {
+    .pane + .pane { border-left: none; border-top: 1px solid var(--border-soft); }
+    .panel-title, .panel-status { font-size: 11px; }
+    .panel-status { white-space: nowrap; }
+  }
+  label {
+    display: block; font: 500 11px/1 "Geist Mono", monospace;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--muted); margin-bottom: 10px;
+  }
+  textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px;
+    background: #0d1015; color: #d7dde6; padding: 14px;
+    font: 400 12.5px/1.6 "Geist Mono", monospace; resize: vertical;
+    transition: border-color 150ms;
+  }
+  #html { min-height: 400px; }
+  @media (max-width: 820px) { #html { min-height: 260px; } }
+  #pattern {
+    min-height: 84px; font: 400 14.5px/1.5 "Geist", sans-serif;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
 
-  .verdict { margin-top: 20px; display: none; }
-  .v-head { display: flex; align-items: center; gap: 16px; }
-  .v-word { font-size: 26px; font-weight: 700; font-family: var(--mono); }
-  .v-word.yes { color: var(--green); }
-  .v-word.no { color: var(--red); }
-  .bar { flex: 1; height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; }
-  .bar i { display: block; height: 100%; border-radius: 4px;
-           background: var(--green); transition: width .5s ease; }
-  .v-prob { font-family: var(--mono); font-size: 15px; min-width: 60px; text-align: right; }
+  .presets { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .preset {
+    appearance: none; border: 1px solid var(--border); border-radius: 6px;
+    background: transparent; color: var(--muted); cursor: pointer;
+    font: 400 12px/1.3 "Geist", sans-serif; padding: 6px 10px;
+    transition: border-color 150ms, color 150ms, background 150ms, transform 100ms;
+  }
+  .preset:hover { border-color: var(--accent); color: var(--text); }
+  .preset:active { transform: scale(0.97); }
 
-  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
-  @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
-  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .fact { background: #0b0e13; border: 1px solid var(--border); border-radius: 6px;
-          padding: 10px 12px; }
-  .fact .k { color: var(--muted); font-size: 11.5px; text-transform: uppercase;
-             letter-spacing: .05em; }
-  .fact .v { font-family: var(--mono); font-size: 17px; margin-top: 2px; }
-  .fact .v.bad { color: var(--red); }
-  .fact .v.ok { color: var(--green); }
-  .sub { margin-top: 10px; font-family: var(--mono); font-size: 12.5px;
-         color: var(--muted); }
-  .sub b { color: var(--text); font-weight: 600; }
+  .go {
+    margin-top: 16px; width: 100%; appearance: none; cursor: pointer;
+    border: none; border-radius: 8px; padding: 13px;
+    background: var(--accent); color: #07130c;
+    font: 600 14.5px/1 "Geist", sans-serif; letter-spacing: 0.01em;
+    transition: filter 150ms, transform 100ms;
+  }
+  .go:hover { filter: brightness(1.08); }
+  .go:active { transform: scale(0.985); }
+  .go:disabled { filter: grayscale(0.4) brightness(0.7); cursor: default; }
 
-  .a-meta { color: var(--muted); font-size: 12.5px; margin-top: 16px;
-            display: flex; gap: 18px; flex-wrap: wrap; }
-  .a-meta b { color: var(--text); font-weight: 600; }
-  .footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 40px; }
-  .footer a { color: var(--blue); text-decoration: none; }
+  /* ── verdict strip ───────────────────────────────────── */
+  .verdict {
+    border-top: 1px solid var(--border-soft); padding: 20px 18px;
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 12px 28px; align-items: center; min-height: 92px;
+  }
+  @media (max-width: 820px) {
+    .verdict { grid-template-columns: 1fr; gap: 14px; }
+  }
+  .v-left { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+  .v-word {
+    font: 500 22px/1 "Geist Mono", monospace; letter-spacing: -0.01em;
+    transition: opacity 300ms var(--ease-out);
+  }
+  .v-word.yes { color: var(--accent); }
+  .v-word.no { color: var(--neg); }
+  .v-track {
+    width: 220px; height: 5px; border-radius: 3px; background: var(--border-soft);
+    overflow: hidden;
+  }
+  .v-fill {
+    height: 100%; width: 100%; border-radius: 3px; background: var(--accent);
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 600ms var(--ease-out), background 300ms;
+  }
+  .v-pct { font: 400 12.5px/1 "Geist Mono", monospace; color: var(--muted); }
+
+  .v-facts { display: flex; flex-wrap: wrap; gap: 7px; }
+  .fact {
+    font: 400 12px/1 "Geist Mono", monospace; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+    background: var(--surface-2); white-space: nowrap;
+  }
+  .fact b { font-weight: 500; color: var(--text); }
+  .fact.bad b { color: var(--neg); }
+  .fact.ok b { color: var(--accent); }
+
+  .v-meta {
+    font: 400 12px/1.9 "Geist Mono", monospace; color: var(--faint);
+    text-align: right; white-space: nowrap;
+  }
+  @media (max-width: 820px) { .v-meta { text-align: left; white-space: normal; } }
+
+  .v-idle { grid-column: 1 / -1; font: 400 13px/1 "Geist Mono", monospace;
+            color: var(--faint); }
+  .v-idle.busy { color: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+  .v-idle.error { color: var(--neg); animation: none; }
+
+  /* ── split section ───────────────────────────────────── */
+  .split { padding: 88px 0 0; }
+  .split h2, .limits h2 {
+    margin: 0 0 8px; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 600;
+    letter-spacing: -0.02em; line-height: 1.15;
+  }
+  .section-sub { margin: 0 0 36px; color: var(--muted); max-width: 56ch; }
+  .split-cols {
+    display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0 40px;
+  }
+  @media (max-width: 820px) {
+    .split-cols { grid-template-columns: 1fr; gap: 28px 0; }
+    .split-cols .rule { display: none; }
+  }
+  .split-cols .rule { background: var(--border-soft); }
+  .col h3 {
+    margin: 0 0 6px; font: 500 12px/1 "Geist Mono", monospace;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint);
+  }
+  .col .col-note { margin: 0 0 18px; font-size: 14.5px; color: var(--muted); }
+  .col ul { margin: 0; padding: 0; list-style: none; }
+  .col li {
+    padding: 12px 0; border-top: 1px solid var(--border-soft);
+    font-size: 14.5px; color: var(--text);
+    display: flex; gap: 12px; align-items: baseline;
+  }
+  .col li code {
+    font: 400 12.5px/1.4 "Geist Mono", monospace; color: var(--accent);
+    background: var(--accent-dim); border-radius: 5px; padding: 3px 7px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .col li .desc { color: var(--muted); }
+
+  /* ── limits section ──────────────────────────────────── */
+  .limits { padding: 72px 0 0; }
+  .limit-rows { margin-top: 32px; }
+  .limit-row {
+    display: grid; grid-template-columns: 260px 1fr; gap: 28px;
+    padding: 20px 0; border-top: 1px solid var(--border-soft);
+    align-items: baseline;
+  }
+  @media (max-width: 820px) { .limit-row { grid-template-columns: 1fr; gap: 6px; } }
+  .limit-row .what { font-weight: 500; font-size: 15px; }
+  .limit-row .why { color: var(--muted); font-size: 14.5px; margin: 0; max-width: 62ch; }
+
+  /* ── footer ──────────────────────────────────────────── */
+  footer {
+    margin-top: 96px; padding: 32px 0 56px; border-top: 1px solid var(--border-soft);
+  }
+  .footer-inner {
+    max-width: 1080px; margin: 0 auto; padding: 0 24px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .footer-line { font: 400 13px/1.5 "Geist Mono", monospace; color: var(--faint); }
+  .footer-links { display: flex; gap: 20px; }
+  .footer-links a { color: var(--muted); text-decoration: none; font-size: 13.5px;
+                    transition: color 150ms; }
+  .footer-links a:hover { color: var(--text); }
+
+  /* ── motion ──────────────────────────────────────────── */
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { opacity: 0; transform: translateY(14px);
+              transition: opacity 500ms var(--ease-out), transform 500ms var(--ease-out); }
+    .reveal.in { opacity: 1; transform: none; }
+    .reveal.d1 { transition-delay: 80ms; }
+    .reveal.d2 { transition-delay: 160ms; }
+    .v-refresh { animation: vfade 300ms var(--ease-out); }
+    @keyframes vfade { from { opacity: 0; transform: translateY(4px); } }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot, .v-idle.busy { animation: none; }
+    .v-fill { transition: none; }
+    html { scroll-behavior: auto; }
+  }
 </style>
 </head>
 <body>
 <div class="topbar"><div class="topbar-inner">
-  <a class="logo" href="/">html<span>-jev</span></a>
-  <div class="tagline">pattern matching for HTML — the part regex can't do</div>
+  <a class="wordmark" href="/">html<b>-jev</b></a>
+  <div class="topbar-right">
+    <span class="live"><span class="dot"></span><span id="modeltag">jev</span></span>
+    <a class="ghlink" href="https://github.com/rheono/html-jev" target="_blank">github</a>
+  </div>
 </div></div>
+
 <main>
-  <div class="grid">
-    <div class="card">
-      <h2>HTML</h2>
-      <textarea id="html" spellcheck="false"></textarea>
+  <section class="hero">
+    <h1 class="reveal">HTML was never a <em>regular language</em>.</h1>
+    <p class="sub reveal d1">Which is why regex lost in 2009. Now the judgment part is a model: paste HTML, describe a pattern, get a <b>typed verdict in one forward pass</b>.</p>
+    <div class="metastrip reveal d2">
+      <span>64k context</span>
+      <span>$0.042 per Mtok</span>
+      <span>output free</span>
     </div>
-    <div class="card">
-      <h2>Pattern</h2>
-      <textarea id="pattern" spellcheck="false" placeholder="Describe what to match, in plain language…"></textarea>
-      <div class="presets" id="presets"></div>
-      <div class="actions">
+  </section>
+
+  <section class="panel reveal d2" id="tool" aria-label="pattern matcher">
+    <div class="panel-head">
+      <span class="panel-title">html-jev · pattern matcher</span>
+      <span class="panel-status" id="status">booting</span>
+    </div>
+    <div class="panel-body">
+      <div class="pane">
+        <label for="html">html</label>
+        <textarea id="html" spellcheck="false" aria-label="HTML input"></textarea>
+      </div>
+      <div class="pane">
+        <label for="pattern">pattern</label>
+        <textarea id="pattern" spellcheck="false" aria-label="pattern in plain language"></textarea>
+        <div class="presets" id="presets"></div>
         <button class="go" id="go">Match</button>
-        <div class="status" id="status">exact counts computed in code · judgment by Jev, one forward pass</div>
       </div>
     </div>
-  </div>
+    <div class="verdict" id="verdict">
+      <div class="v-idle" id="vidle">running the first match…</div>
+    </div>
+  </section>
 
-  <div class="card verdict" id="verdict">
-    <div class="v-head">
-      <div class="v-word" id="vword"></div>
-      <div class="bar"><i id="vbar"></i></div>
-      <div class="v-prob" id="vprob"></div>
-    </div>
-    <div class="panels">
-      <div>
-        <h2>Deterministic · computed in code</h2>
-        <div class="facts" id="facts"></div>
+  <section class="split">
+    <h2 class="reveal">Two machines, one job</h2>
+    <p class="section-sub reveal">The parts a regex can do exactly stay in code, where they're fast and provable. The part a regex can't express goes to the model.</p>
+    <div class="split-cols reveal">
+      <div class="col">
+        <h3>code · exact</h3>
+        <p class="col-note">A lenient tokenizer, run locally, before anything hits the model.</p>
+        <ul>
+          <li><code>count</code><span class="desc">every tag, element type, self-closer, exact</span></li>
+          <li><code>depth</code><span class="desc">max nesting, no estimates</span></li>
+          <li><code>balance</code><span class="desc">which tags never close, listed by name</span></li>
+        </ul>
       </div>
-      <div>
-        <h2>Jev's judgment</h2>
-        <div class="sub" id="sub"></div>
+      <div class="rule" aria-hidden="true"></div>
+      <div class="col">
+        <h3>model · judgment</h3>
+        <p class="col-note">One forward pass, typed answers, calibrated probabilities.</p>
+        <ul>
+          <li><code>match</code><span class="desc">does the document match your plain-language pattern</span></li>
+          <li><code>well_formed</code><span class="desc">structural verdict with confidence</span></li>
+          <li><code>anything</code><span class="desc">patterns you can name, not just patterns you can compile</span></li>
+        </ul>
       </div>
     </div>
-    <div class="a-meta" id="meta"></div>
-  </div>
+  </section>
 
-  <div class="footer">
-    2009 said this was provably impossible — HTML isn't a regular language.
-    <a href="https://stackoverflow.com/questions/1732348" target="_blank">The thread, 4.1M views.</a>
-    2026: the exact mechanics stay in code, the judgment goes to a System One model at $0.042/Mtok.
-  </div>
+  <section class="limits">
+    <h2 class="reveal">What it won't do</h2>
+    <p class="section-sub reveal">The model's own documentation lists its limits. We design around them instead of pretending.</p>
+    <div class="limit-rows reveal">
+      <div class="limit-row">
+        <div class="what">It doesn't count reliably</div>
+        <p class="why">Counts are computed in code and shown in the deterministic panel. Ask the model "how many" and it guesses; that's on us to not do.</p>
+      </div>
+      <div class="limit-row">
+        <div class="what">It doesn't extract spans</div>
+        <p class="why">No text generation, so no "give me the exact substring". It judges; it doesn't quote. Use a parser for the quote.</p>
+      </div>
+      <div class="limit-row">
+        <div class="what">Huge states cost accuracy</div>
+        <p class="why">Context rot is real, so input is capped at 60k characters. That's plenty of real-world pages and stays inside the state budget.</p>
+      </div>
+      <div class="limit-row">
+        <div class="what">It reads literally</div>
+        <p class="why">The pattern you type is the pattern it judges, at face value. Write it the way you'd explain it to a careful intern.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-inner">
+      <span class="footer-line">the 169-line regex is retired</span>
+      <div class="footer-links">
+        <a href="https://stackoverflow.com/questions/1732348" target="_blank">the 2009 thread</a>
+        <a href="https://github.com/rheono/html-jev" target="_blank">source</a>
+        <a href="https://docs.typesafe.ai" target="_blank">model docs</a>
+      </div>
+    </div>
+  </footer>
 </main>
 
 <script>
@@ -147,73 +403,98 @@ const SAMPLE = `<!doctype html>
 </html>`;
 
 const PRESETS = [
-  "contains opening tags that are never closed",
-  "contains self-closing tags (e.g. <br/>, <img ... />)",
-  "contains a > character inside an attribute value",
-  "contains an HTML comment",
-  "contains an anchor whose href points to a domain other than this page",
+  "opening tags that are never closed",
+  "self-closing tags such as <br/> or <img ... />",
+  "a > character inside an attribute value",
+  "an HTML comment",
+  "an anchor pointing to a domain other than this page",
 ];
 
 const $ = (id) => document.getElementById(id);
-$("html").value = SAMPLE;
-$("pattern").value = PRESETS[0];
+const htmlEl = $("html"), patternEl = $("pattern"), goBtn = $("go"),
+      statusEl = $("status"), verdictEl = $("verdict"), vidleEl = $("vidle");
+htmlEl.value = SAMPLE;
+patternEl.value = PRESETS[0];
+
 PRESETS.forEach((p) => {
   const b = document.createElement("button");
+  b.type = "button";
   b.className = "preset";
   b.textContent = p;
-  b.onclick = () => { $("pattern").value = p; };
+  b.onclick = () => { patternEl.value = p; };
   $("presets").appendChild(b);
 });
 
-$("go").onclick = async () => {
-  const btn = $("go"), status = $("status");
-  btn.disabled = true; status.textContent = "one forward pass…";
+function fact(k, v, cls) {
+  return `<span class="fact ${cls || ""}">${k}: <b>${v}</b></span>`;
+}
+
+function render(d) {
+  const yes = d.match >= 0.5;
+  const pct = Math.round(d.match * 100);
+  const s = d.stats;
+  const unclosed = s.unclosed.length ? s.unclosed.join(", ") : "none";
+  verdictEl.innerHTML = `
+    <div class="v-left v-refresh">
+      <div class="v-word ${yes ? "yes" : "no"}">${yes ? "MATCH" : "NO MATCH"}</div>
+      <div class="v-track"><div class="v-fill" id="vfill"></div></div>
+      <div class="v-pct">${pct}% probability</div>
+    </div>
+    <div class="v-facts v-refresh">
+      ${fact("tags", s.tags)}
+      ${fact("depth", s.max_depth)}
+      ${fact("self-closing", s.self_closing)}
+      ${fact("unclosed", unclosed, s.unclosed.length ? "bad" : "ok")}
+    </div>
+    <div class="v-meta v-refresh">
+      ${d.latency_ms} ms<br>
+      ${d.usage.input_tokens} tokens · $${d.cost_usd.toPrecision(2)}<br>
+      ${d.model}
+    </div>`;
+  requestAnimationFrame(() => {
+    const f = $("vfill");
+    if (f) { f.style.background = yes ? "var(--accent)" : "var(--neg)"; f.style.transform = `scaleX(${pct / 100})`; }
+  });
+  $("modeltag").textContent = d.model;
+}
+
+async function run() {
+  goBtn.disabled = true;
+  statusEl.className = "panel-status busy";
+  statusEl.textContent = "one forward pass…";
+  verdictEl.innerHTML = `<div class="v-idle busy" id="vidle">one forward pass…</div>`;
   try {
     const r = await fetch("/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html: $("html").value, pattern: $("pattern").value }),
+      body: JSON.stringify({ html: htmlEl.value, pattern: patternEl.value }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
-
-    const yes = d.match >= 0.5;
-    const pct = Math.round(d.match * 100);
-    const vword = $("vword");
-    vword.textContent = yes ? "MATCH" : "NO MATCH";
-    vword.className = "v-word " + (yes ? "yes" : "no");
-    const vbar = $("vbar");
-    vbar.style.width = pct + "%";
-    vbar.style.background = yes ? "var(--green)" : "var(--red)";
-    $("vprob").textContent = pct + "%";
-
-    const s = d.stats;
-    const fact = (k, v, cls) =>
-      `<div class="fact"><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div></div>`;
-    $("facts").innerHTML =
-      fact("tags", s.tags) +
-      fact("element types", s.elements) +
-      fact("max depth", s.max_depth) +
-      fact("self-closing", s.self_closing) +
-      fact("unclosed", s.unclosed.length ? s.unclosed.join(", ") : "none",
-           s.unclosed.length ? "bad" : "ok") +
-      fact("tag names", s.tag_names.join(" "));
-
-    $("sub").innerHTML =
-      `<b>well_formed</b> = ${Math.round((d.answers.well_formed?.noul ?? 0) * 100)}% ` +
-      `(confidence ${d.answers.well_formed?.confidence ?? "—"})`;
-
-    $("meta").innerHTML =
-      `<span>model <b>${d.model}</b></span>` +
-      `<span><b>${d.latency_ms} ms</b></span>` +
-      `<span><b>${d.usage?.input_tokens ?? 0} tokens</b> in · $${d.cost_usd}</span>`;
-    $("verdict").style.display = "block";
-    status.textContent = "done.";
+    render(d);
+    statusEl.className = "panel-status";
+    statusEl.textContent = `matched in ${d.latency_ms} ms`;
   } catch (e) {
-    status.textContent = "error: " + e.message;
+    statusEl.className = "panel-status error";
+    statusEl.textContent = "error";
+    verdictEl.innerHTML = `<div class="v-idle error">error: ${e.message}</div>`;
   }
-  btn.disabled = false;
-};
+  goBtn.disabled = false;
+}
+
+goBtn.onclick = run;
+patternEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run(); }
+});
+
+// scroll reveals
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
+}, { threshold: 0.12 });
+document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+// guided demo: preloaded data, first match runs on load
+run();
 </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typesafe_sdk import AsyncTypeSafeClient
 
@@ -78,6 +79,7 @@ def to_dict(value):
 
 
 app = FastAPI(title="html-jev")
+app.mount("/fonts", StaticFiles(directory=Path(__file__).parent / "static" / "fonts"), name="fonts")
 
 
 class MatchRequest(BaseModel):
